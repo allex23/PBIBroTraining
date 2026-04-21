@@ -1,0 +1,56 @@
+let
+    // ---- CONFIG ----
+    FiscalStartMonth = 4,   // Change this (1 = Jan, 4 = Apr, 7 = Jul, etc.)
+    StartDate = #date(2018, 1, 1),
+    EndDate   = Date.EndOfYear(DateTime.Date(DateTime.LocalNow())),
+
+    // ---- GENERATE DATE LIST ----
+    DateList = List.Dates(
+        StartDate,
+        Duration.Days(EndDate - StartDate) + 1,
+        #duration(1,0,0,0)
+    ),
+
+    DateTable = Table.FromList(DateList, Splitter.SplitByNothing(), {"Date"}),
+    AddDate = Table.TransformColumns(DateTable, {{"Date", Date.From}}),
+
+    // ---- STANDARD CALENDAR ----
+    AddYear = Table.AddColumn(AddDate, "Calendar Year", each Date.Year([Date]), Int64.Type),
+    AddMonth = Table.AddColumn(AddYear, "Calendar Month", each Date.Month([Date]), Int64.Type),
+
+    // ---- FISCAL YEAR ----
+    AddFiscalYear =
+        Table.AddColumn(AddMonth, "Fiscal Year",
+            each if [Calendar Month] >= FiscalStartMonth
+                 then [Calendar Year] + 1
+                 else [Calendar Year],
+            Int64.Type
+        ),
+
+    // ---- FISCAL PERIOD ----
+    AddFiscalPeriod =
+        Table.AddColumn(AddFiscalYear, "Fiscal Period",
+            each let
+                m = [Calendar Month]
+            in if m >= FiscalStartMonth
+               then m - FiscalStartMonth + 1
+               else m + (12 - FiscalStartMonth + 1),
+            Int64.Type
+        ),
+
+    // ---- FISCAL QUARTER ----
+    AddFiscalQuarter =
+        Table.AddColumn(AddFiscalPeriod, "Fiscal Quarter",
+            each "Q" & Number.ToText(Number.RoundUp([Fiscal Period] / 3)),
+            type text
+        ),
+
+    // ---- SORT COLUMNS ----
+    AddSortPeriod =
+        Table.AddColumn(AddFiscalQuarter, "Fiscal Period Sort",
+            each [Fiscal Year] * 100 + [Fiscal Period],
+            Int64.Type
+        )
+
+in
+    AddSortPeriod
